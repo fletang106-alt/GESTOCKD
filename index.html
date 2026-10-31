@@ -16,29 +16,31 @@ input,select,textarea,button{font:inherit;padding:11px;border:1px solid #ccd5df;
 button{background:#087bd1;color:white;border:0;font-weight:bold;cursor:pointer}
 button.danger{background:#c62828}
 button.secondary{background:#526477}
+button.small{width:auto;padding:7px 10px;font-size:12px}
 nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:7px;margin:15px 0}
 nav button{font-size:13px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
 .metric{background:#e8f3ff;padding:17px;border-radius:10px}
 .metric strong{font-size:25px;display:block;margin-top:8px}
-table{width:100%;border-collapse:collapse;min-width:600px}
+table{width:100%;border-collapse:collapse;min-width:650px}
 th,td{padding:10px;border-bottom:1px solid #e5eaf0;text-align:left}
 .table-wrap{overflow-x:auto}
 .hidden{display:none!important}
 h2{color:#07366c}
 small{color:#64748b}
+.actions{display:flex;gap:5px;flex-wrap:wrap}
+.actions button{width:auto}
 @media(max-width:600px){header h1{font-size:19px}.container{padding:10px}}
+@media print{nav,form,.no-print,header button{display:none!important}.card{box-shadow:none}}
 </style>
 </head>
 <body>
-
 <header>
 <h1>GESTOCKD</h1>
 <p>Système de gestion de stock</p>
 </header>
 
 <div class="container">
-
 <section id="login" class="card">
 <h2>Connexion</h2>
 <form id="loginForm">
@@ -57,11 +59,11 @@ small{color:#64748b}
 <button class="secondary" onclick="logout()">Déconnexion</button>
 </div>
 
-<nav id="menu">
+<nav>
 <button onclick="showPage('dashboard')">Tableau de bord</button>
-<button onclick="showPage('produits')">Produits</button>
-<button onclick="showPage('clients')">Clients</button>
-<button onclick="showPage('depots')">Dépôts</button>
+<button onclick="showPage('produits')">Liste produits</button>
+<button onclick="showPage('depots')">Liste dépôts</button>
+<button onclick="showPage('clients')">Liste clients</button>
 <button onclick="showPage('entrees')">Entrées</button>
 <button onclick="showPage('sorties')">Sorties</button>
 <button onclick="showPage('stock')">Stock actuel</button>
@@ -83,43 +85,55 @@ small{color:#64748b}
 </section>
 
 <section id="produits" class="page hidden">
-<div class="card">
-<h2>Liste des produits</h2>
+<div class="card admin-only">
+<h2>Ajouter un produit</h2>
 <form id="produitForm">
 <input id="produitNom" placeholder="Nom du produit" required>
 <input id="produitReference" placeholder="Référence">
 <input id="produitCategorie" placeholder="Catégorie">
 <input id="produitUnite" placeholder="Unité" value="unité">
-<input id="produitMinimum" type="number" min="0" placeholder="Stock minimum">
-<button>Ajouter le produit</button>
+<input id="produitMinimum" type="number" min="0" step="0.01" placeholder="Stock minimum">
+<button>Enregistrer le produit</button>
 </form>
 </div>
 <div class="card table-wrap">
+<h2>Liste des produits</h2>
 <table>
-<thead><tr><th>Référence</th><th>Produit</th><th>Catégorie</th><th>Unité</th></tr></thead>
+<thead><tr><th>Référence</th><th>Produit</th><th>Catégorie</th><th>Unité</th><th>Stock minimum</th><th class="admin-only">Actions</th></tr></thead>
 <tbody id="produitsTable"></tbody>
 </table>
 </div>
 </section>
 
+<section id="depots" class="page hidden">
+<div class="card admin-only">
+<h2>Ajouter un dépôt</h2>
+<form id="depotForm">
+<input id="depotNom" placeholder="Nom du dépôt" required>
+<textarea id="depotDescription" placeholder="Description du dépôt"></textarea>
+<button>Enregistrer le dépôt</button>
+</form>
+</div>
+<div class="card table-wrap">
+<h2>Liste des dépôts</h2>
+<table>
+<thead><tr><th>Nom</th><th>Description</th><th>État</th><th class="admin-only">Actions</th></tr></thead>
+<tbody id="depotsTable"></tbody>
+</table>
+</div>
+</section>
+
 <section id="clients" class="page hidden">
-<div class="card">
-<h2>Liste des clients</h2>
+<div class="card admin-only">
+<h2>Ajouter un client</h2>
 <form id="clientForm">
 <input id="clientNom" placeholder="Nom du client" required>
 <input id="clientTelephone" placeholder="Téléphone">
 <input id="clientAdresse" placeholder="Adresse">
 <button>Ajouter le client</button>
 </form>
-<div id="clientsTable"></div>
 </div>
-</section>
-
-<section id="depots" class="page hidden">
-<div class="card">
-<h2>Dépôts</h2>
-<p>Dépôt principal</p>
-</div>
+<div class="card"><h2>Liste des clients</h2><div id="clientsTable"></div></div>
 </section>
 
 <section id="entrees" class="page hidden">
@@ -128,7 +142,7 @@ small{color:#64748b}
 <form id="entreeForm">
 <input id="entreeDate" type="date" required>
 <select id="entreeProduit" required></select>
-<select id="entreeDepot" required><option value="1">Dépôt principal</option></select>
+<select id="entreeDepot" required></select>
 <input id="entreeQuantite" type="number" min="0.01" step="0.01" placeholder="Quantité reçue" required>
 <input id="entreeFournisseur" placeholder="Fournisseur">
 <input id="entreeReference" placeholder="N° bon / facture">
@@ -145,7 +159,7 @@ small{color:#64748b}
 <form id="sortieForm">
 <input id="sortieDate" type="date" required>
 <select id="sortieProduit" required></select>
-<select id="sortieDepot" required><option value="1">Dépôt principal</option></select>
+<select id="sortieDepot" required></select>
 <select id="sortieClient"><option value="">Choisir le client</option></select>
 <input id="sortieFacture" type="number" min="0" step="0.01" placeholder="Quantité sur facture" required>
 <input id="sortieAvance" type="number" min="0" step="0.01" placeholder="Avance / quantité sortie" required>
@@ -163,22 +177,31 @@ small{color:#64748b}
 </section>
 
 <section id="stock" class="page hidden">
-<div class="card">
+<div class="card table-wrap">
 <h2>Stock actuel par produit et dépôt</h2>
-<div class="table-wrap"><table>
-<thead><tr><th>Produit</th><th>Dépôt</th><th>Stock</th></tr></thead>
+<table>
+<thead><tr><th>Produit</th><th>Dépôt</th><th>Stock</th><th>Stock minimum</th></tr></thead>
 <tbody id="stockTable"></tbody>
-</table></div>
+</table>
 </div>
 </section>
 
 <section id="inventaire" class="page hidden">
-<div class="card"><h2>Inventaires</h2><div id="inventaireContent"></div></div>
+<div class="card"><h2>Inventaires</h2><p>Module réservé à l'administrateur.</p></div>
 </section>
 
 <section id="ajustements" class="page hidden">
-<div class="card"><h2>Régularisation</h2>
-<p>Réservé à l'administrateur.</p>
+<div class="card">
+<h2>Régularisation</h2>
+<form id="ajustementForm">
+<select id="ajustementProduit" required></select>
+<select id="ajustementDepot" required></select>
+<input id="ajustementAvant" type="number" min="0" step="0.01" placeholder="Quantité avant" required>
+<input id="ajustementApres" type="number" min="0" step="0.01" placeholder="Quantité après" required>
+<input id="ajustementMotif" placeholder="Motif" required>
+<textarea id="ajustementObservations" placeholder="Observations"></textarea>
+<button>Enregistrer la régularisation</button>
+</form>
 </div>
 </section>
 
@@ -192,7 +215,7 @@ small{color:#64748b}
 <form id="utilisateurForm">
 <input id="userNom" placeholder="Nom complet" required>
 <input id="userUsername" placeholder="Nom d'utilisateur" required>
-<input id="userPassword" type="password" placeholder="Mot de passe" required>
+<input id="userPassword" type="password" minlength="8" placeholder="Mot de passe (8 caractères minimum)" required>
 <select id="userRole">
 <option value="utilisateur">Utilisateur</option>
 <option value="administrateur">Administrateur</option>
@@ -204,10 +227,7 @@ small{color:#64748b}
 </section>
 
 <section id="rapports" class="page hidden">
-<div class="card">
-<h2>Rapports et PDF</h2>
-<button onclick="window.print()">Imprimer / Enregistrer en PDF</button>
-</div>
+<div class="card"><h2>Rapports et PDF</h2><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>
 </section>
 </section>
 </div>
@@ -216,175 +236,329 @@ small{color:#64748b}
 const API="/api";
 let token=localStorage.getItem("gestockd_token");
 let currentUser=null;
-let produits=[],clients=[],stock=[],entrees=[],sorties=[];
+let produits=[],clients=[],depots=[],stock=[],entrees=[],sorties=[];
+
+const el=id=>document.getElementById(id);
+const val=id=>el(id).value;
 
 async function request(path,options={}) {
- const response=await fetch(API+"/"+path,{
-  ...options,
-  headers:{
-   "Content-Type":"application/json",
-   ...(token?{"Authorization":"Bearer "+token}:{}),
-   ...(options.headers||{})
+  const response=await fetch(API+"/"+path,{
+    ...options,
+    headers:{
+      "Content-Type":"application/json",
+      ...(token?{"Authorization":"Bearer "+token}:{}),
+      ...(options.headers||{})
+    }
+  });
+  const data=await response.json();
+  if(!response.ok) throw new Error(data.error||"Erreur de connexion.");
+  return data;
+}
+function escapeHtml(value) {
+  return String(value??"").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+function admin() {
+  return currentUser?.role==="administrateur";
+}
+function logout() {
+  if(token) request("logout",{method:"POST"}).catch(()=>{});
+  localStorage.removeItem("gestockd_token");
+  token=null;currentUser=null;
+  el("application").classList.add("hidden");
+  el("login").classList.remove("hidden");
+  el("loginMessage").textContent="Vous êtes déconnecté.";
+}
+el("loginForm").onsubmit=async e=>{
+  e.preventDefault();
+  try {
+    const result=await request("login",{method:"POST",body:JSON.stringify({
+      username:val("username"),password:val("password")
+    })});
+    token=result.token;
+    localStorage.setItem("gestockd_token",token);
+    currentUser=result.user;
+    await startApp();
+    el("loginMessage").textContent="";
+  } catch(error) {
+    el("loginMessage").textContent=error.message;
   }
- });
- const data=await response.json();
- if(!response.ok) throw new Error(data.error||"Erreur de connexion");
- return data;
-}
-
-function logout(){
- localStorage.removeItem("gestockd_token");
- token=null;currentUser=null;
- document.getElementById("application").classList.add("hidden");
- document.getElementById("login").classList.remove("hidden");
-}
-
-document.getElementById("loginForm").onsubmit=async e=>{
- e.preventDefault();
- const message=document.getElementById("loginMessage");
- try{
-  const result=await request("login",{method:"POST",body:JSON.stringify({
-   username:document.getElementById("username").value,
-   password:document.getElementById("password").value
-  })});
-  token=result.token;
-  localStorage.setItem("gestockd_token",token);
-  currentUser=result.user;
-  await startApp();
- }catch(error){message.textContent=error.message;}
 };
+async function startApp() {
+  el("login").classList.add("hidden");
+  el("application").classList.remove("hidden");
+  el("welcome").textContent="Bienvenue, "+currentUser.nom+" ("+currentUser.role+")";
+  document.querySelectorAll(".admin-only").forEach(node=>{
+    node.classList.toggle("hidden",!admin());
+  });
+  await refresh();
+  showPage("dashboard");
+}
+function showPage(id) {
+  const restricted=["inventaire","ajustements","historique","utilisateurs","rapports"];
+  if(restricted.includes(id)&&!admin()) {
+    alert("Accès réservé à l'administrateur.");
+    return;
+  }
+  document.querySelectorAll(".page").forEach(node=>node.classList.add("hidden"));
+  el(id).classList.remove("hidden");
+}
+function fillSelect(id,items,placeholder) {
+  const select=el(id);
+  select.innerHTML="";
+  select.add(new Option(placeholder,""));
+  items.forEach(item=>{
+    if(item.actif!==false) select.add(new Option(item.nom,item.id));
+  });
+}
+function renderProducts() {
+  el("produitsTable").innerHTML=produits.map(p=>`
+    <tr>
+      <td>${escapeHtml(p.reference||"")}</td>
+      <td>${escapeHtml(p.nom)}</td>
+      <td>${escapeHtml(p.categorie||"")}</td>
+      <td>${escapeHtml(p.unite||"")}</td>
+      <td>${escapeHtml(p.stock_minimum??0)}</td>
+      <td class="${admin()?"":"hidden"}">
+        <div class="actions">
+          <button class="small" onclick="editProduct('${p.id}')">Modifier</button>
+          <button class="small danger" onclick="deleteProduct('${p.id}')">Supprimer</button>
+        </div>
+      </td>
+    </tr>`).join("")||'<tr><td colspan="6">Aucun produit enregistré.</td></tr>';
+}
+function renderDepots() {
+  el("depotsTable").innerHTML=depots.map(d=>`
+    <tr>
+      <td>${escapeHtml(d.nom)}</td>
+      <td>${escapeHtml(d.description||"")}</td>
+      <td>${d.actif?"Actif":"Désactivé"}</td>
+      <td class="${admin()?"":"hidden"}">
+        <div class="actions">
+          <button class="small" onclick="editDepot('${d.id}')">Modifier</button>
+          ${d.actif?`<button class="small danger" onclick="deleteDepot('${d.id}')">Désactiver</button>`:""}
+          ${!d.actif?`<button class="small" onclick="reactivateDepot('${d.id}')">Réactiver</button>`:""}
+        </div>
+      </td>
+    </tr>`).join("")||'<tr><td colspan="4">Aucun dépôt enregistré.</td></tr>';
+}
+async function refresh() {
+  [produits,clients,depots,stock]=await Promise.all([
+    request("produits"),request("clients"),request("depots"),request("stock")
+  ]);
+  fillSelect("entreeProduit",produits,"Choisir produit");
+  fillSelect("sortieProduit",produits,"Choisir produit");
+  fillSelect("ajustementProduit",produits,"Choisir produit");
+  fillSelect("entreeDepot",depots,"Choisir dépôt");
+  fillSelect("sortieDepot",depots,"Choisir dépôt");
+  fillSelect("ajustementDepot",depots,"Choisir dépôt");
+  fillSelect("sortieClient",clients,"Choisir client");
 
-async function startApp(){
- document.getElementById("login").classList.add("hidden");
- document.getElementById("application").classList.remove("hidden");
- document.getElementById("welcome").textContent="Bienvenue, "+currentUser.nom+" ("+currentUser.role+")";
- document.querySelectorAll(".admin-only").forEach(el=>{
-  el.classList.toggle("hidden",currentUser.role!=="administrateur");
- });
- await refresh();
- showPage("dashboard");
+  renderProducts();
+  renderDepots();
+
+  el("clientsTable").innerHTML=clients.map(c=>
+    `<p>${escapeHtml(c.nom)} — ${escapeHtml(c.telephone||"")} — ${escapeHtml(c.adresse||"")}</p>`
+  ).join("")||"Aucun client enregistré.";
+
+  el("stockTable").innerHTML=stock.map(s=>`
+    <tr>
+      <td>${escapeHtml(s.produit)}</td>
+      <td>${escapeHtml(s.depot)}</td>
+      <td>${Number(s.stock).toLocaleString("fr-FR")}</td>
+      <td>${escapeHtml(s.stock_minimum??0)}</td>
+    </tr>`).join("");
+
+  el("totalProduits").textContent=produits.length;
+  el("totalStock").textContent=stock.reduce((n,s)=>n+Number(s.stock),0).toLocaleString("fr-FR");
+
+  if(admin()) {
+    const data=await request("historique");
+    entrees=data.entrees||[];
+    sorties=data.sorties||[];
+    el("totalEntrees").textContent=entrees.reduce((n,e)=>n+Number(e.quantite),0);
+    el("totalSorties").textContent=sorties.reduce((n,s)=>n+Number(s.avance),0);
+    el("historiqueContent").innerHTML=`
+      <h3>Entrées : ${entrees.length}</h3>
+      <div class="table-wrap"><table>
+      <tr><th>Date</th><th>Produit</th><th>Dépôt</th><th>Quantité</th><th>Fournisseur</th></tr>
+      ${entrees.map(e=>`<tr><td>${escapeHtml(e.date_entree||"")}</td><td>${escapeHtml(e.produit)}</td><td>${escapeHtml(e.depot)}</td><td>${escapeHtml(e.quantite)}</td><td>${escapeHtml(e.fournisseur||"")}</td></tr>`).join("")}
+      </table></div>
+      <h3>Sorties : ${sorties.length}</h3>
+      <div class="table-wrap"><table>
+      <tr><th>Date</th><th>Produit</th><th>Dépôt</th><th>Facture</th><th>Avance</th><th>Balance</th><th>Client</th></tr>
+      ${sorties.map(s=>`<tr><td>${escapeHtml(s.date_sortie||"")}</td><td>${escapeHtml(s.produit)}</td><td>${escapeHtml(s.depot)}</td><td>${escapeHtml(s.quantite_facture)}</td><td>${escapeHtml(s.avance)}</td><td>${Number(s.quantite_facture)-Number(s.avance)}</td><td>${escapeHtml(s.client||"")}</td></tr>`).join("")}
+      </table></div>`;
+  } else {
+    el("totalEntrees").textContent="—";
+    el("totalSorties").textContent="—";
+  }
+}
+async function editProduct(id) {
+  const p=produits.find(x=>String(x.id)===String(id));
+  if(!p||!admin()) return;
+  const nom=prompt("Nom du produit :",p.nom);
+  if(nom===null) return;
+  if(!nom.trim()) return alert("Le nom est obligatoire.");
+  const reference=prompt("Référence :",p.reference||"");
+  if(reference===null) return;
+  const categorie=prompt("Catégorie :",p.categorie||"");
+  if(categorie===null) return;
+  const unite=prompt("Unité :",p.unite||"unité");
+  if(unite===null) return;
+  const minimum=prompt("Stock minimum :",p.stock_minimum??0);
+  if(minimum===null) return;
+  try {
+    await request("produits/"+encodeURIComponent(id),{
+      method:"PATCH",body:JSON.stringify({
+        nom,reference,categorie,unite,stock_minimum:minimum
+      })
+    });
+    await refresh();alert("Produit modifié.");
+  } catch(error) { alert(error.message); }
+}
+async function deleteProduct(id) {
+  if(!admin()||!confirm("Confirmer la suppression de ce produit ?")) return;
+  try {
+    await request("produits/"+encodeURIComponent(id),{method:"DELETE"});
+    await refresh();alert("Produit supprimé.");
+  } catch(error) { alert(error.message); }
+}
+async function editDepot(id) {
+  const d=depots.find(x=>String(x.id)===String(id));
+  if(!d||!admin()) return;
+  const nom=prompt("Nom du dépôt :",d.nom);
+  if(nom===null) return;
+  if(!nom.trim()) return alert("Le nom est obligatoire.");
+  const description=prompt("Description :",d.description||"");
+  if(description===null) return;
+  try {
+    await request("depots/"+encodeURIComponent(id),{
+      method:"PATCH",body:JSON.stringify({nom,description,actif:d.actif})
+    });
+    await refresh();alert("Dépôt modifié.");
+  } catch(error) { alert(error.message); }
+}
+async function deleteDepot(id) {
+  if(!admin()||!confirm("Désactiver ce dépôt ? Il restera dans l'historique.")) return;
+  try {
+    await request("depots/"+encodeURIComponent(id),{method:"DELETE"});
+    await refresh();alert("Dépôt désactivé.");
+  } catch(error) { alert(error.message); }
+}
+async function reactivateDepot(id) {
+  const d=depots.find(x=>String(x.id)===String(id));
+  if(!d||!admin()) return;
+  try {
+    await request("depots/"+encodeURIComponent(id),{
+      method:"PATCH",body:JSON.stringify({
+        nom:d.nom,description:d.description,actif:true
+      })
+    });
+    await refresh();alert("Dépôt réactivé.");
+  } catch(error) { alert(error.message); }
 }
 
-function showPage(id){
- if(["inventaire","ajustements","historique","utilisateurs","rapports"].includes(id)&&currentUser?.role!=="administrateur")return;
- document.querySelectorAll(".page").forEach(el=>el.classList.add("hidden"));
- document.getElementById(id).classList.remove("hidden");
-}
-
-function fillSelect(id,items,placeholder){
- const el=document.getElementById(id);
- el.innerHTML=`<option value="">${placeholder}</option>`;
- items.forEach(item=>el.add(new Option(item.nom,item.id)));
-}
-
-async function refresh(){
- [produits,clients,stock]=await Promise.all([
-  request("produits"),request("clients"),request("stock")
- ]);
- fillSelect("entreeProduit",produits,"Choisir produit");
- fillSelect("sortieProduit",produits,"Choisir produit");
- fillSelect("sortieClient",clients,"Choisir client");
- document.getElementById("produitsTable").innerHTML=produits.map(p=>
- `<tr><td>${escapeHtml(p.reference||"")}</td><td>${escapeHtml(p.nom)}</td><td>${escapeHtml(p.categorie||"")}</td><td>${escapeHtml(p.unite||"")}</td></tr>`).join("");
- document.getElementById("clientsTable").innerHTML=clients.map(c=>
- `<p>${escapeHtml(c.nom)} — ${escapeHtml(c.telephone||"")}</p>`).join("");
- document.getElementById("stockTable").innerHTML=stock.map(s=>
- `<tr><td>${escapeHtml(s.produit)}</td><td>${escapeHtml(s.depot)}</td><td>${s.stock}</td></tr>`).join("");
- document.getElementById("totalProduits").textContent=produits.length;
- document.getElementById("totalStock").textContent=stock.reduce((n,s)=>n+Number(s.stock),0);
- if(currentUser.role==="administrateur"){
-  const data=await request("historique");
-  entrees=data.entrees;sorties=data.sorties;
-  document.getElementById("totalEntrees").textContent=entrees.reduce((n,e)=>n+Number(e.quantite),0);
-  document.getElementById("totalSorties").textContent=sorties.reduce((n,s)=>n+Number(s.avance),0);
-  document.getElementById("historiqueContent").textContent="Entrées : "+entrees.length+" | Sorties : "+sorties.length;
- }else{
-  document.getElementById("totalEntrees").textContent="—";
-  document.getElementById("totalSorties").textContent="—";
- }
-}
-
-function escapeHtml(value){
- return String(value).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
-
-document.getElementById("sortieFacture").oninput=calcBalance;
-document.getElementById("sortieAvance").oninput=calcBalance;
-function calcBalance(){
- const facture=Number(document.getElementById("sortieFacture").value)||0;
- const avance=Number(document.getElementById("sortieAvance").value)||0;
- document.getElementById("sortieBalance").value=(facture-avance).toFixed(2);
-}
-
-document.getElementById("produitForm").onsubmit=async e=>{
- e.preventDefault();
- try{
-  await request("produits",{method:"POST",body:JSON.stringify({
-   nom:produitNom.value,reference:produitReference.value,
-   categorie:produitCategorie.value,unite:produitUnite.value,
-   stock_minimum:produitMinimum.value
-  })});
-  e.target.reset();await refresh();alert("Produit enregistré.");
- }catch(error){alert(error.message);}
+el("produitForm").onsubmit=async e=>{
+  e.preventDefault();
+  try {
+    await request("produits",{method:"POST",body:JSON.stringify({
+      nom:val("produitNom"),reference:val("produitReference"),
+      categorie:val("produitCategorie"),unite:val("produitUnite"),
+      stock_minimum:val("produitMinimum")
+    })});
+    e.target.reset();el("produitUnite").value="unité";
+    await refresh();alert("Produit enregistré.");
+  } catch(error) { alert(error.message); }
 };
-
-document.getElementById("clientForm").onsubmit=async e=>{
- e.preventDefault();
- try{
-  await request("clients",{method:"POST",body:JSON.stringify({
-   nom:clientNom.value,telephone:clientTelephone.value,adresse:clientAdresse.value
-  })});
-  e.target.reset();await refresh();alert("Client enregistré.");
- }catch(error){alert(error.message);}
+el("depotForm").onsubmit=async e=>{
+  e.preventDefault();
+  try {
+    await request("depots",{method:"POST",body:JSON.stringify({
+      nom:val("depotNom"),description:val("depotDescription")
+    })});
+    e.target.reset();await refresh();alert("Dépôt enregistré.");
+  } catch(error) { alert(error.message); }
 };
-
-document.getElementById("entreeForm").onsubmit=async e=>{
- e.preventDefault();
- try{
-  await request("entrees",{method:"POST",body:JSON.stringify({
-   date_entree:entreeDate.value,produit_id:entreeProduit.value,
-   depot_id:entreeDepot.value,quantite:entreeQuantite.value,
-   fournisseur:entreeFournisseur.value,reference_document:entreeReference.value,
-   date_expiration:entreeExpiration.value,observations:entreeObservations.value
-  })});
-  e.target.reset();await refresh();alert("Entrée enregistrée.");
- }catch(error){alert(error.message);}
+el("clientForm").onsubmit=async e=>{
+  e.preventDefault();
+  try {
+    await request("clients",{method:"POST",body:JSON.stringify({
+      nom:val("clientNom"),telephone:val("clientTelephone"),adresse:val("clientAdresse")
+    })});
+    e.target.reset();await refresh();alert("Client enregistré.");
+  } catch(error) { alert(error.message); }
 };
-
-document.getElementById("sortieForm").onsubmit=async e=>{
- e.preventDefault();
- try{
-  await request("sorties",{method:"POST",body:JSON.stringify({
-   date_sortie:sortieDate.value,produit_id:sortieProduit.value,
-   depot_id:sortieDepot.value,client_id:sortieClient.value||null,
-   quantite_facture:sortieFacture.value,avance:sortieAvance.value,
-   chauffeur:sortieChauffeur.value,plaque:sortiePlaque.value,
-   numero_bon_livraison:sortieBon.value,
-   telephone_chauffeur:sortieTelephone.value,
-   observations:sortieObservations.value
-  })});
-  e.target.reset();calcBalance();await refresh();alert("Sortie enregistrée.");
- }catch(error){alert(error.message);}
+el("entreeForm").onsubmit=async e=>{
+  e.preventDefault();
+  try {
+    await request("entrees",{method:"POST",body:JSON.stringify({
+      date_entree:val("entreeDate"),produit_id:val("entreeProduit"),
+      depot_id:val("entreeDepot"),quantite:val("entreeQuantite"),
+      fournisseur:val("entreeFournisseur"),reference_document:val("entreeReference"),
+      date_expiration:val("entreeExpiration"),observations:val("entreeObservations")
+    })});
+    e.target.reset();await refresh();alert("Entrée enregistrée.");
+  } catch(error) { alert(error.message); }
 };
-
-document.getElementById("utilisateurForm").onsubmit=async e=>{
- e.preventDefault();
- try{
-  await request("utilisateurs",{method:"POST",body:JSON.stringify({
-   nom:userNom.value,username:userUsername.value,password:userPassword.value,role:userRole.value
-  })});
-  e.target.reset();alert("Utilisateur créé.");
- }catch(error){alert(error.message);}
+el("sortieFacture").oninput=calcBalance;
+el("sortieAvance").oninput=calcBalance;
+function calcBalance() {
+  const facture=Number(val("sortieFacture"))||0;
+  const avance=Number(val("sortieAvance"))||0;
+  el("sortieBalance").value=(facture-avance).toFixed(2);
+}
+el("sortieForm").onsubmit=async e=>{
+  e.preventDefault();
+  try {
+    await request("sorties",{method:"POST",body:JSON.stringify({
+      date_sortie:val("sortieDate"),produit_id:val("sortieProduit"),
+      depot_id:val("sortieDepot"),client_id:val("sortieClient")||null,
+      quantite_facture:val("sortieFacture"),avance:val("sortieAvance"),
+      chauffeur:val("sortieChauffeur"),plaque:val("sortiePlaque"),
+      numero_bon_livraison:val("sortieBon"),
+      telephone_chauffeur:val("sortieTelephone"),
+      observations:val("sortieObservations")
+    })});
+    e.target.reset();calcBalance();await refresh();alert("Sortie enregistrée.");
+  } catch(error) { alert(error.message); }
+};
+el("utilisateurForm").onsubmit=async e=>{
+  e.preventDefault();
+  try {
+    await request("utilisateurs",{method:"POST",body:JSON.stringify({
+      nom:val("userNom"),username:val("userUsername"),
+      password:val("userPassword"),role:val("userRole")
+    })});
+    e.target.reset();alert("Utilisateur créé.");
+  } catch(error) { alert(error.message); }
+};
+el("ajustementForm").onsubmit=async e=>{
+  e.preventDefault();
+  try {
+    await request("ajustements",{method:"POST",body:JSON.stringify({
+      produit_id:val("ajustementProduit"),depot_id:val("ajustementDepot"),
+      quantite_avant:val("ajustementAvant"),quantite_apres:val("ajustementApres"),
+      motif:val("ajustementMotif"),observations:val("ajustementObservations")
+    })});
+    e.target.reset();await refresh();alert("Régularisation enregistrée.");
+  } catch(error) { alert(error.message); }
 };
 
 (async()=>{
- if(token){
-  try{
-   const result=await request("me");
-   currentUser=result.user;
-   await startApp();
-  }catch(error){logout();}
- }
+  if(token) {
+    try {
+      const result=await request("me");
+      currentUser=result.user;
+      await startApp();
+    } catch(error) {
+      localStorage.removeItem("gestockd_token");
+      token=null;
+      currentUser=null;
+      el("loginMessage").textContent=error.message;
+    }
+  }
 })();
 </script>
 </body>
