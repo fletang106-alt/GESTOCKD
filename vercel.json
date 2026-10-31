@@ -1,14 +1,6 @@
 {
   "version": 2,
-  "functions": {
-    "api/[...path].js": {
-      "maxDuration": 10
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/[...path]"
-    }
-  ]
+  "buildCommand": "npm run build",
+  "outputDirectory": ".",
+  "installCommand": "npm install"
 }
