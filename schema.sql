@@ -93,3 +93,14 @@ ON ajustements_stock(produit_id, depot_id);
 INSERT INTO depots (nom)
 VALUES ('Dépôt principal')
 ON CONFLICT (nom) DO NOTHING;
+CREATE TABLE IF NOT EXISTS sessions (
+    id BIGSERIAL PRIMARY KEY,
+    utilisateur_id BIGINT NOT NULL
+        REFERENCES utilisateurs(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    expire_le TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_token
+ON sessions(token_hash);
