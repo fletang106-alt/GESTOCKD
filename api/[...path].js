@@ -6,24 +6,23 @@ const scrypt = promisify(crypto.scrypt);
 const sql = neon(process.env.DATABASE_URL);
 
 const send = (res, status, data) => res.status(status).json(data);
-
-const hashPassword = async (password) => {
+const hashPassword = async password => {
   const salt = crypto.randomBytes(16).toString("hex");
   const key = await scrypt(password, salt, 64);
   return `${salt}:${key.toString("hex")}`;
 };
-
 const verifyPassword = async (password, stored) => {
   if (!stored || !stored.includes(":")) return false;
   const [salt, saved] = stored.split(":");
   const key = await scrypt(password, salt, 64);
-  const savedBuffer = Buffer.from(saved, "hex");
-  return savedBuffer.length === key.length &&
-    crypto.timingSafeEqual(key, savedBuffer);
+  const buffer = Buffer.from(saved, "hex");
+  return buffer.length === key.length && crypto.timingSafeEqual(key, buffer);
 };
-
-const tokenHash = (token) =>
+const tokenHash = token =>
   crypto.createHash("sha256").update(token).digest("hex");
+const required = value =>
+  value !== undefined && value !== null && String(value).trim() !== "";
+const adminOnly = user => user?.role === "administrateur";
 
 async function getUser(req) {
   const header = req.headers.authorization || "";
@@ -42,14 +41,6 @@ async function getUser(req) {
   return rows[0] || null;
 }
 
-function adminOnly(user) {
-  return user && user.role === "administrateur";
-}
-
-function required(value) {
-  return value !== undefined && value !== null && String(value).trim() !== "";
-}
-
 async function createFirstAdmin() {
   const existing = await sql`SELECT id FROM utilisateurs LIMIT 1`;
   if (existing.length) return;
@@ -59,9 +50,7 @@ async function createFirstAdmin() {
   const nom = process.env.ADMIN_NAME || "Administrateur";
 
   if (!username || !password) {
-    throw new Error(
-      "Configurez ADMIN_USERNAME et ADMIN_PASSWORD dans les variables Vercel."
-    );
+    throw new Error("Configurez ADMIN_USERNAME et ADMIN_PASSWORD dans Vercel.");
   }
 
   const passwordHash = await hashPassword(password);
@@ -74,19 +63,20 @@ async function createFirstAdmin() {
 
 export default async function handler(req, res) {
   try {
-    const path = new URL(req.url, "https://gestockd.app").pathname
-      .replace(/^\/api\/?/, "")
-      .replace(/\/$/, "");
-
     if (!process.env.DATABASE_URL) {
       return send(res, 500, { error: "DATABASE_URL manquant dans Vercel." });
     }
 
-    // CONNEXION
-    if (path === "login" && req.method === "POST") {
+    const path = new URL(req.url, "https://gestockd.app").pathname
+      .replace(/^\/api\/?/, "").replace(/\/$/, "");
+    const parts = path.split("/").filter(Boolean);
+    const route = parts[0] || "";
+    const id = parts[1] || "";
+
+    if (route === "login" && req.method === "POST") {
       const { username, password } = req.body || {};
       if (!required(username) || !required(password)) {
-        return send(res, 400, { error: "Nom d'utilisateur et mot de passe obligatoires." });
+        return send(res, 400, { error: "Identifiant et mot de passe obligatoires." });
       }
 
       await createFirstAdmin();
@@ -94,18 +84,17 @@ export default async function handler(req, res) {
       const rows = await sql`
         SELECT id, nom, username, password_hash, role
         FROM utilisateurs
-        WHERE username = ${String(username).trim()}
-          AND actif = TRUE
+        WHERE username = ${String(username).trim()} AND actif = TRUE
         LIMIT 1
       `;
-
       const user = rows[0];
+
       if (!user || !(await verifyPassword(String(password), user.password_hash))) {
         return send(res, 401, { error: "Identifiants incorrects." });
       }
 
       const token = crypto.randomBytes(32).toString("hex");
-      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const expires = new Date(Date.now() + 7 * 86400000);
 
       await sql`
         INSERT INTO sessions (utilisateur_id, token_hash, expire_le)
@@ -115,23 +104,22 @@ export default async function handler(req, res) {
       return send(res, 200, {
         token,
         user: {
-          id: user.id,
-          nom: user.nom,
-          username: user.username,
-          role: user.role
+          id: user.id, nom: user.nom,
+          username: user.username, role: user.role
         }
       });
     }
 
-    // TOUTES LES AUTRES ROUTES NÉCESSITENT UNE CONNEXION
     const user = await getUser(req);
-    if (!user) return send(res, 401, { error: "Session invalide ou expirée. Reconnectez-vous." });
+    if (!user) {
+      return send(res, 401, { error: "Session invalide ou expirée. Reconnectez-vous." });
+    }
 
-    if (path === "me" && req.method === "GET") {
+    if (route === "me" && req.method === "GET") {
       return send(res, 200, { user });
     }
 
-    if (path === "logout" && req.method === "POST") {
+    if (route === "logout" && req.method === "POST") {
       const token = (req.headers.authorization || "").replace(/^Bearer /, "");
       if (token) {
         await sql`DELETE FROM sessions WHERE token_hash = ${tokenHash(token)}`;
@@ -140,40 +128,62 @@ export default async function handler(req, res) {
     }
 
     // PRODUITS
-    if (path === "produits" && req.method === "GET") {
-      const rows = await sql`
+    if (route === "produits" && parts.length === 1 && req.method === "GET") {
+      return send(res, 200, await sql`
         SELECT id, reference, nom, categorie, unite, stock_minimum
         FROM produits ORDER BY nom
-      `;
-      return send(res, 200, rows);
+      `);
     }
 
-    if (path === "produits" && req.method === "POST") {
+    if (route === "produits" && parts.length === 1 && req.method === "POST") {
       if (!adminOnly(user)) return send(res, 403, { error: "Réservé à l'administrateur." });
       const b = req.body || {};
-      if (!required(b.nom)) return send(res, 400, { error: "Le nom du produit est obligatoire." });
+      if (!required(b.nom)) return send(res, 400, { error: "Nom du produit obligatoire." });
 
       const rows = await sql`
         INSERT INTO produits (nom, reference, categorie, unite, stock_minimum)
-        VALUES (
-          ${b.nom}, ${b.reference || null}, ${b.categorie || null},
-          ${b.unite || "unité"}, ${Number(b.stock_minimum || 0)}
-        )
+        VALUES (${b.nom}, ${b.reference || null}, ${b.categorie || null},
+          ${b.unite || "unité"}, ${Number(b.stock_minimum || 0)})
         RETURNING *
       `;
       return send(res, 201, rows[0]);
     }
 
+    if (route === "produits" && id && req.method === "PATCH") {
+      if (!adminOnly(user)) return send(res, 403, { error: "Réservé à l'administrateur." });
+      const b = req.body || {};
+      if (!required(b.nom)) return send(res, 400, { error: "Nom du produit obligatoire." });
+
+      const rows = await sql`
+        UPDATE produits SET
+          nom = ${b.nom},
+          reference = ${b.reference || null},
+          categorie = ${b.categorie || null},
+          unite = ${b.unite || "unité"},
+          stock_minimum = ${Number(b.stock_minimum || 0)}
+        WHERE id = ${id}
+        RETURNING *
+      `;
+      return rows.length ? send(res, 200, rows[0]) :
+        send(res, 404, { error: "Produit introuvable." });
+    }
+
+    if (route === "produits" && id && req.method === "DELETE") {
+      if (!adminOnly(user)) return send(res, 403, { error: "Réservé à l'administrateur." });
+      const rows = await sql`DELETE FROM produits WHERE id = ${id} RETURNING id`;
+      return rows.length ? send(res, 200, { message: "Produit supprimé." }) :
+        send(res, 404, { error: "Produit introuvable." });
+    }
+
     // CLIENTS
-    if (path === "clients" && req.method === "GET") {
+    if (route === "clients" && req.method === "GET") {
       return send(res, 200, await sql`SELECT * FROM clients ORDER BY nom`);
     }
 
-    if (path === "clients" && req.method === "POST") {
+    if (route === "clients" && req.method === "POST") {
       if (!adminOnly(user)) return send(res, 403, { error: "Réservé à l'administrateur." });
       const b = req.body || {};
-      if (!required(b.nom)) return send(res, 400, { error: "Le nom du client est obligatoire." });
-
+      if (!required(b.nom)) return send(res, 400, { error: "Nom du client obligatoire." });
       const rows = await sql`
         INSERT INTO clients (nom, telephone, adresse)
         VALUES (${b.nom}, ${b.telephone || null}, ${b.adresse || null})
@@ -182,18 +192,18 @@ export default async function handler(req, res) {
       return send(res, 201, rows[0]);
     }
 
-    // DÉPÔTS
-    if (path === "depots" && req.method === "GET") {
-      return send(res, 200, await sql`
-        SELECT id, nom, description, actif FROM depots
-        WHERE actif = TRUE ORDER BY nom
-      `);
+    // DEPOTS
+    if (route === "depots" && parts.length === 1 && req.method === "GET") {
+      const rows = adminOnly(user)
+        ? await sql`SELECT id, nom, description, actif FROM depots ORDER BY nom`
+        : await sql`SELECT id, nom, description, actif FROM depots WHERE actif = TRUE ORDER BY nom`;
+      return send(res, 200, rows);
     }
 
-    if (path === "depots" && req.method === "POST") {
+    if (route === "depots" && parts.length === 1 && req.method === "POST") {
       if (!adminOnly(user)) return send(res, 403, { error: "Réservé à l'administrateur." });
       const b = req.body || {};
-      if (!required(b.nom)) return send(res, 400, { error: "Le nom du dépôt est obligatoire." });
+      if (!required(b.nom)) return send(res, 400, { error: "Nom du dépôt obligatoire." });
       const rows = await sql`
         INSERT INTO depots (nom, description)
         VALUES (${b.nom}, ${b.description || null})
@@ -202,8 +212,32 @@ export default async function handler(req, res) {
       return send(res, 201, rows[0]);
     }
 
-    // ENTRÉES DE STOCK
-    if (path === "entrees" && req.method === "GET") {
+    if (route === "depots" && id && req.method === "PATCH") {
+      if (!adminOnly(user)) return send(res, 403, { error: "Réservé à l'administrateur." });
+      const b = req.body || {};
+      if (!required(b.nom)) return send(res, 400, { error: "Nom du dépôt obligatoire." });
+      const rows = await sql`
+        UPDATE depots SET nom = ${b.nom},
+          description = ${b.description || null},
+          actif = ${b.actif !== false}
+        WHERE id = ${id}
+        RETURNING *
+      `;
+      return rows.length ? send(res, 200, rows[0]) :
+        send(res, 404, { error: "Dépôt introuvable." });
+    }
+
+    if (route === "depots" && id && req.method === "DELETE") {
+      if (!adminOnly(user)) return send(res, 403, { error: "Réservé à l'administrateur." });
+      const rows = await sql`
+        UPDATE depots SET actif = FALSE WHERE id = ${id} RETURNING id
+      `;
+      return rows.length ? send(res, 200, { message: "Dépôt désactivé." }) :
+        send(res, 404, { error: "Dépôt introuvable." });
+    }
+
+    // ENTREES
+    if (route === "entrees" && req.method === "GET") {
       return send(res, 200, await sql`
         SELECT e.*, p.nom AS produit, d.nom AS depot
         FROM entrees_stock e
@@ -213,12 +247,16 @@ export default async function handler(req, res) {
       `);
     }
 
-    if (path === "entrees" && req.method === "POST") {
+    if (route === "entrees" && req.method === "POST") {
       const b = req.body || {};
       if (!required(b.produit_id) || !required(b.depot_id) ||
-          !required(b.quantite) || Number(b.quantite) <= 0) {
+          !required(b.quantite) || !Number.isFinite(Number(b.quantite)) ||
+          Number(b.quantite) <= 0) {
         return send(res, 400, { error: "Produit, dépôt et quantité positive obligatoires." });
       }
+
+      const depot = await sql`SELECT id FROM depots WHERE id = ${b.depot_id} AND actif = TRUE`;
+      if (!depot.length) return send(res, 400, { error: "Dépôt inactif ou inexistant." });
 
       const rows = await sql`
         INSERT INTO entrees_stock
@@ -234,8 +272,8 @@ export default async function handler(req, res) {
       return send(res, 201, rows[0]);
     }
 
-    // SORTIES DE STOCK : L'AVANCE EST LA QUANTITÉ QUI DIMINUE LE STOCK
-    if (path === "sorties" && req.method === "GET") {
+    // SORTIES : L'AVANCE DIMINYE LE STOCK
+    if (route === "sorties" && req.method === "GET") {
       return send(res, 200, await sql`
         SELECT s.*, p.nom AS produit, d.nom AS depot, c.nom AS client
         FROM sorties_stock s
@@ -246,7 +284,7 @@ export default async function handler(req, res) {
       `);
     }
 
-    if (path === "sorties" && req.method === "POST") {
+    if (route === "sorties" && req.method === "POST") {
       const b = req.body || {};
       const facture = Number(b.quantite_facture);
       const avance = Number(b.avance);
@@ -254,27 +292,26 @@ export default async function handler(req, res) {
       if (!required(b.produit_id) || !required(b.depot_id) ||
           !Number.isFinite(facture) || !Number.isFinite(avance) ||
           facture < 0 || avance < 0 || avance > facture) {
-        return send(res, 400, { error: "Vérifiez le produit, le dépôt, la quantité facturée et l'avance." });
+        return send(res, 400, { error: "Vérifiez le produit, le dépôt, la facture et l'avance." });
       }
+
+      const depot = await sql`SELECT id FROM depots WHERE id = ${b.depot_id} AND actif = TRUE`;
+      if (!depot.length) return send(res, 400, { error: "Dépôt inactif ou inexistant." });
 
       const stockRows = await sql`
         SELECT
           COALESCE((SELECT SUM(quantite) FROM entrees_stock
             WHERE produit_id = ${b.produit_id} AND depot_id = ${b.depot_id}), 0)
-          -
-          COALESCE((SELECT SUM(avance) FROM sorties_stock
+          - COALESCE((SELECT SUM(avance) FROM sorties_stock
             WHERE produit_id = ${b.produit_id} AND depot_id = ${b.depot_id}), 0)
-          +
-          COALESCE((SELECT SUM(quantite_apres - quantite_avant)
+          + COALESCE((SELECT SUM(quantite_apres - quantite_avant)
             FROM ajustements_stock
             WHERE produit_id = ${b.produit_id} AND depot_id = ${b.depot_id}), 0)
           AS disponible
       `;
 
       if (avance > Number(stockRows[0].disponible)) {
-        return send(res, 409, {
-          error: `Stock insuffisant. Disponible : ${stockRows[0].disponible}.`
-        });
+        return send(res, 409, { error: `Stock insuffisant. Disponible : ${stockRows[0].disponible}.` });
       }
 
       const rows = await sql`
@@ -293,19 +330,17 @@ export default async function handler(req, res) {
       return send(res, 201, rows[0]);
     }
 
-    // STOCK ACTUEL PAR PRODUIT ET PAR DÉPÔT
-    if (path === "stock" && req.method === "GET") {
+    // STOCK PAR PRODUIT ET DEPOT
+    if (route === "stock" && req.method === "GET") {
       const rows = await sql`
-        SELECT
-          p.id AS produit_id, p.nom AS produit, p.reference, p.unite,
+        SELECT p.id AS produit_id, p.nom AS produit, p.reference, p.unite,
           p.stock_minimum, d.id AS depot_id, d.nom AS depot,
           COALESCE(e.total_entrees, 0) AS total_entrees,
           COALESCE(s.total_sorties, 0) AS total_sorties,
           COALESCE(a.ajustement, 0) AS ajustement,
           COALESCE(e.total_entrees, 0) - COALESCE(s.total_sorties, 0)
             + COALESCE(a.ajustement, 0) AS stock
-        FROM produits p
-        CROSS JOIN depots d
+        FROM produits p CROSS JOIN depots d
         LEFT JOIN (
           SELECT produit_id, depot_id, SUM(quantite) AS total_entrees
           FROM entrees_stock GROUP BY produit_id, depot_id
@@ -325,16 +360,15 @@ export default async function handler(req, res) {
       return send(res, 200, rows);
     }
 
-    // HISTORIQUE — ADMINISTRATEUR UNIQUEMENT
-    if (path === "historique" && req.method === "GET") {
+    // HISTORIQUE — ADMIN
+    if (route === "historique" && req.method === "GET") {
       if (!adminOnly(user)) return send(res, 403, { error: "Accès réservé à l'administrateur." });
-
       const entrees = await sql`
         SELECT e.*, p.nom AS produit, d.nom AS depot
         FROM entrees_stock e
         JOIN produits p ON p.id = e.produit_id
         JOIN depots d ON d.id = e.depot_id
-        ORDER BY e.created_at DESC
+        ORDER BY e.date_entree DESC
       `;
       const sorties = await sql`
         SELECT s.*, p.nom AS produit, d.nom AS depot, c.nom AS client
@@ -342,13 +376,13 @@ export default async function handler(req, res) {
         JOIN produits p ON p.id = s.produit_id
         JOIN depots d ON d.id = s.depot_id
         LEFT JOIN clients c ON c.id = s.client_id
-        ORDER BY s.created_at DESC
+        ORDER BY s.date_sortie DESC
       `;
       return send(res, 200, { entrees, sorties });
     }
 
-    // UTILISATEURS — ADMINISTRATEUR UNIQUEMENT
-    if (path === "utilisateurs" && req.method === "GET") {
+    // UTILISATEURS — ADMIN
+    if (route === "utilisateurs" && req.method === "GET") {
       if (!adminOnly(user)) return send(res, 403, { error: "Accès réservé à l'administrateur." });
       return send(res, 200, await sql`
         SELECT id, nom, username, role, actif, created_at
@@ -356,14 +390,14 @@ export default async function handler(req, res) {
       `);
     }
 
-    if (path === "utilisateurs" && req.method === "POST") {
+    if (route === "utilisateurs" && req.method === "POST") {
       if (!adminOnly(user)) return send(res, 403, { error: "Accès réservé à l'administrateur." });
       const b = req.body || {};
       if (!required(b.nom) || !required(b.username) || !required(b.password)) {
         return send(res, 400, { error: "Nom, identifiant et mot de passe obligatoires." });
       }
       if (String(b.password).length < 8) {
-        return send(res, 400, { error: "Le mot de passe doit contenir au moins 8 caractères." });
+        return send(res, 400, { error: "Le mot de passe doit contenir 8 caractères minimum." });
       }
       if (!["administrateur", "utilisateur"].includes(b.role)) {
         return send(res, 400, { error: "Rôle invalide." });
@@ -377,8 +411,8 @@ export default async function handler(req, res) {
       return send(res, 201, rows[0]);
     }
 
-    // RÉGULARISATION / AJUSTEMENT — ADMINISTRATEUR UNIQUEMENT
-    if (path === "ajustements" && req.method === "GET") {
+    // AJUSTEMENTS — ADMIN
+    if (route === "ajustements" && req.method === "GET") {
       if (!adminOnly(user)) return send(res, 403, { error: "Accès réservé à l'administrateur." });
       return send(res, 200, await sql`
         SELECT a.*, p.nom AS produit, d.nom AS depot
@@ -389,7 +423,7 @@ export default async function handler(req, res) {
       `);
     }
 
-    if (path === "ajustements" && req.method === "POST") {
+    if (route === "ajustements" && req.method === "POST") {
       if (!adminOnly(user)) return send(res, 403, { error: "Accès réservé à l'administrateur." });
       const b = req.body || {};
       if (!required(b.produit_id) || !required(b.depot_id) ||
@@ -397,14 +431,18 @@ export default async function handler(req, res) {
           !required(b.motif)) {
         return send(res, 400, { error: "Tous les champs obligatoires doivent être remplis." });
       }
+      const avant = Number(b.quantite_avant);
+      const apres = Number(b.quantite_apres);
+      if (!Number.isFinite(avant) || !Number.isFinite(apres) || avant < 0 || apres < 0) {
+        return send(res, 400, { error: "Quantités invalides." });
+      }
       const rows = await sql`
         INSERT INTO ajustements_stock
           (produit_id, depot_id, quantite_avant, quantite_apres,
            motif, observations, utilisateur_id)
         VALUES
-          (${b.produit_id}, ${b.depot_id}, ${Number(b.quantite_avant)},
-           ${Number(b.quantite_apres)}, ${b.motif},
-           ${b.observations || null}, ${user.id})
+          (${b.produit_id}, ${b.depot_id}, ${avant}, ${apres},
+           ${b.motif}, ${b.observations || null}, ${user.id})
         RETURNING *
       `;
       return send(res, 201, rows[0]);
@@ -417,11 +455,12 @@ export default async function handler(req, res) {
     if (error.code === "23505") {
       return send(res, 409, { error: "Cette valeur existe déjà." });
     }
-    if (error.code === "23503" || error.code === "23514") {
-      return send(res, 400, { error: "Données invalides ou référence inexistante." });
+    if (error.code === "23503") {
+      return send(res, 409, { error: "Impossible de supprimer cet élément : il est utilisé dans l'historique." });
     }
-    return send(res, 500, {
-      error: error.message || "Erreur interne du serveur."
-    });
+    if (error.code === "23514") {
+      return send(res, 400, { error: "Données invalides." });
+    }
+    return send(res, 500, { error: error.message || "Erreur interne du serveur." });
   }
 }
